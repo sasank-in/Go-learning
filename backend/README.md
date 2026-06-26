@@ -43,11 +43,18 @@ Supports `+ - * / % ^`, unary minus/plus, parentheses, decimals, and
 scientific notation (`1.5e3`), with standard operator precedence. `^`
 (exponent) is right-associative.
 
-Functions (case-insensitive): `sqrt`, `cbrt`, `abs`, `floor`, `ceil`,
-`round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `ln`, `log`
-(base 10), `log2`.
+Functions (case-insensitive):
 
-Constants: `pi`, `e`, `tau`. Example: `sqrt(16) + 2 * pi`.
+- **Single-argument**: `sqrt`, `cbrt`, `abs`, `floor`, `ceil`, `round`,
+  `trunc`, `sign`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`,
+  `cosh`, `tanh`, `exp`, `ln`, `log10`, `log2`, `deg` (radians→degrees),
+  `rad` (degrees→radians)
+- **Multi-argument**: `pow(x, y)`, `atan2(y, x)`, `hypot(x, y)`,
+  `log(x[, base])`, `max(...)`, `min(...)`, `sum(...)`, `avg(...)`
+
+Constants: `pi`, `e`, `tau`.
+
+Examples: `sqrt(16) + 2 * pi`, `pow(2, 10)`, `max(1, 9, 4)`, `log(8, 2)`.
 
 **Structured form** — a single two-operand operation:
 ```json

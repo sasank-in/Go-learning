@@ -42,6 +42,24 @@ func TestEvaluate(t *testing.T) {
 		{"scientific notation", "1.5e3", 1500},
 		{"sci negative exp", "2e-2", 0.02},
 		{"case insensitive", "SQRT(4) + PI - pi", 2},
+		{"pow", "pow(2, 10)", 1024},
+		{"hypot", "hypot(3, 4)", 5},
+		{"max two", "max(3, 7)", 7},
+		{"max many", "max(1, 9, 4, 2)", 9},
+		{"min many", "min(5, 2, 8, 1)", 1},
+		{"sum", "sum(1, 2, 3, 4)", 10},
+		{"avg", "avg(2, 4, 6)", 4},
+		{"log base 2", "log(8, 2)", 3},
+		{"log default base 10", "log(1000)", 3},
+		{"log10 explicit", "log10(100)", 2},
+		{"nested multiarg", "max(pow(2, 3), 7)", 8},
+		{"sign positive", "sign(42)", 1},
+		{"sign negative", "sign(-3)", -1},
+		{"trunc", "trunc(3.9)", 3},
+		{"tanh zero", "tanh(0)", 0},
+		{"deg of pi", "deg(pi)", 180},
+		{"rad of 180", "rad(180)", math.Pi},
+		{"expr args", "pow(1 + 1, 2 + 1)", 8},
 	}
 
 	for _, tt := range tests {
@@ -77,6 +95,11 @@ func TestEvaluateErrors(t *testing.T) {
 		{"function missing parens", "sqrt 4", nil},
 		{"function missing arg", "sqrt()", nil},
 		{"function unclosed", "sqrt(4", nil},
+		{"too many args", "sqrt(4, 9)", nil},
+		{"pow too few args", "pow(2)", nil},
+		{"empty args", "max()", nil},
+		{"trailing comma", "max(1, 2,)", nil},
+		{"bad log base", "log(8, 1)", nil},
 	}
 
 	for _, tt := range tests {

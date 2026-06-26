@@ -27,6 +27,12 @@ const KEYS: Key[] = [
   { label: "e", role: "fn" },
   { label: "%", role: "fn" },
 
+  { label: "xⁿ", insert: "pow(", role: "fn" },
+  { label: "max", insert: "max(", role: "fn" },
+  { label: "min", insert: "min(", role: "fn" },
+  { label: "abs", insert: "abs(", role: "fn" },
+  { label: ",", role: "fn" },
+
   { label: "C", role: "util", action: "clear" },
   { label: "(", role: "util" },
   { label: ")", role: "util" },
@@ -176,7 +182,7 @@ function onKeyboard(e: KeyboardEvent) {
     render();
     return;
   }
-  if (/^[0-9+\-*/%^().]$/.test(key)) {
+  if (/^[0-9+\-*/%^(),.]$/.test(key)) {
     expression += key;
     errorText = "";
     render();
