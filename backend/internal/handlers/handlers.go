@@ -36,10 +36,26 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// Register wires the calculator routes onto the given mux.
+// Register wires the calculator routes onto the given mux, wrapped with
+// permissive CORS so the browser frontend can call the API directly.
 func Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", health)
 	mux.HandleFunc("POST /calculate", calculate)
+	mux.HandleFunc("OPTIONS /calculate", preflight)
+}
+
+// withCORS sets permissive CORS headers on the response.
+func withCORS(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", "*")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	h.Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+// preflight answers CORS preflight OPTIONS requests.
+func preflight(w http.ResponseWriter, _ *http.Request) {
+	withCORS(w)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func health(w http.ResponseWriter, _ *http.Request) {
@@ -73,6 +89,7 @@ func calculate(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	withCORS(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
