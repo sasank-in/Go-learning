@@ -21,6 +21,7 @@ const (
 	tokCaret
 	tokLParen
 	tokRParen
+	tokIdent
 	tokEOF
 )
 
@@ -78,12 +79,32 @@ func tokenize(expr string) ([]token, error) {
 				}
 				i++
 			}
+			// Optional scientific-notation exponent: e / E followed by an
+			// optional sign and one or more digits (e.g. 1.5e3, 2E-4).
+			if i < len(runes) && (runes[i] == 'e' || runes[i] == 'E') {
+				j := i + 1
+				if j < len(runes) && (runes[j] == '+' || runes[j] == '-') {
+					j++
+				}
+				if j < len(runes) && isDigit(runes[j]) {
+					for j < len(runes) && isDigit(runes[j]) {
+						j++
+					}
+					i = j
+				}
+			}
 			lit := string(runes[start:i])
 			val, err := strconv.ParseFloat(lit, 64)
 			if err != nil {
 				return nil, fmt.Errorf("invalid number: %q", lit)
 			}
 			tokens = append(tokens, token{typ: tokNumber, value: lit, num: val})
+		case isLetter(c):
+			start := i
+			for i < len(runes) && (isLetter(runes[i]) || isDigit(runes[i])) {
+				i++
+			}
+			tokens = append(tokens, token{typ: tokIdent, value: string(runes[start:i])})
 		default:
 			return nil, fmt.Errorf("unexpected character: %q", string(c))
 		}
@@ -94,6 +115,38 @@ func tokenize(expr string) ([]token, error) {
 }
 
 func isDigit(c rune) bool { return c >= '0' && c <= '9' }
+
+func isLetter(c rune) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+// constants maps recognized constant names (case-insensitive) to their values.
+var constants = map[string]float64{
+	"pi":  math.Pi,
+	"e":   math.E,
+	"tau": 2 * math.Pi,
+}
+
+// functions maps recognized function names (case-insensitive) to their
+// single-argument implementations.
+var functions = map[string]func(float64) float64{
+	"sqrt":  math.Sqrt,
+	"cbrt":  math.Cbrt,
+	"abs":   math.Abs,
+	"floor": math.Floor,
+	"ceil":  math.Ceil,
+	"round": math.Round,
+	"sin":   math.Sin,
+	"cos":   math.Cos,
+	"tan":   math.Tan,
+	"asin":  math.Asin,
+	"acos":  math.Acos,
+	"atan":  math.Atan,
+	"exp":   math.Exp,
+	"ln":    math.Log,
+	"log":   math.Log10,
+	"log2":  math.Log2,
+}
 
 // parser is a recursive-descent parser/evaluator over a token slice.
 //
@@ -239,11 +292,44 @@ func (p *parser) parsePrimary() (float64, error) {
 		}
 		p.advance()
 		return v, nil
+	case tokIdent:
+		return p.parseIdent(t)
 	case tokEOF:
 		return 0, errors.New("unexpected end of expression")
 	default:
 		return 0, fmt.Errorf("unexpected token: %q", t.value)
 	}
+}
+
+// parseIdent resolves an identifier as either a constant (e.g. "pi") or a
+// function call (e.g. "sqrt(2)"). The name is matched case-insensitively.
+func (p *parser) parseIdent(t token) (float64, error) {
+	p.advance()
+	name := strings.ToLower(t.value)
+
+	// Function call: identifier immediately followed by "(".
+	if p.peek().typ == tokLParen {
+		fn, ok := functions[name]
+		if !ok {
+			return 0, fmt.Errorf("unknown function: %q", t.value)
+		}
+		p.advance() // consume "("
+		arg, err := p.parseExpression()
+		if err != nil {
+			return 0, err
+		}
+		if p.peek().typ != tokRParen {
+			return 0, fmt.Errorf("expected closing ')' after argument to %q", t.value)
+		}
+		p.advance() // consume ")"
+		return fn(arg), nil
+	}
+
+	// Otherwise it must be a constant.
+	if val, ok := constants[name]; ok {
+		return val, nil
+	}
+	return 0, fmt.Errorf("unknown identifier: %q", t.value)
 }
 
 // normalize is a small helper to trim and validate that an expression is

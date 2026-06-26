@@ -39,8 +39,15 @@ Two request forms are supported. If `expression` is non-empty it takes precedenc
 ```json
 { "expression": "2 + 3 * (4 - 1)" }
 ```
-Supports `+ - * / % ^`, unary minus/plus, parentheses, and decimals, with
-standard operator precedence. `^` (exponent) is right-associative.
+Supports `+ - * / % ^`, unary minus/plus, parentheses, decimals, and
+scientific notation (`1.5e3`), with standard operator precedence. `^`
+(exponent) is right-associative.
+
+Functions (case-insensitive): `sqrt`, `cbrt`, `abs`, `floor`, `ceil`,
+`round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `ln`, `log`
+(base 10), `log2`.
+
+Constants: `pi`, `e`, `tau`. Example: `sqrt(16) + 2 * pi`.
 
 **Structured form** — a single two-operand operation:
 ```json

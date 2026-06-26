@@ -27,6 +27,21 @@ func TestEvaluate(t *testing.T) {
 		{"whitespace heavy", "  7   -   2  ", 5},
 		{"chained", "1 + 2 + 3 + 4 + 5", 15},
 		{"double negative", "--5", 5},
+		{"sqrt", "sqrt(16)", 4},
+		{"nested func", "sqrt(sqrt(16))", 2},
+		{"func in expr", "2 + sqrt(9) * 2", 8},
+		{"pi constant", "pi", math.Pi},
+		{"const in expr", "2 * pi", 2 * math.Pi},
+		{"e constant", "e", math.E},
+		{"abs negative", "abs(-7)", 7},
+		{"floor", "floor(3.9)", 3},
+		{"ceil", "ceil(3.1)", 4},
+		{"log10", "log(1000)", 3},
+		{"ln of e", "ln(e)", 1},
+		{"func with expr arg", "sqrt(2 ^ 2 + 3 ^ 2 - 4)", 3},
+		{"scientific notation", "1.5e3", 1500},
+		{"sci negative exp", "2e-2", 0.02},
+		{"case insensitive", "SQRT(4) + PI - pi", 2},
 	}
 
 	for _, tt := range tests {
@@ -57,6 +72,11 @@ func TestEvaluateErrors(t *testing.T) {
 		{"bad character", "2 $ 3", nil},
 		{"double dot", "1.2.3", nil},
 		{"dangling number", "2 3", nil},
+		{"unknown function", "foo(2)", nil},
+		{"unknown identifier", "x + 1", nil},
+		{"function missing parens", "sqrt 4", nil},
+		{"function missing arg", "sqrt()", nil},
+		{"function unclosed", "sqrt(4", nil},
 	}
 
 	for _, tt := range tests {
