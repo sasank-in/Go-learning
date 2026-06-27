@@ -22,6 +22,7 @@ const (
 	tokLParen
 	tokRParen
 	tokComma
+	tokEquals
 	tokIdent
 	tokEOF
 )
@@ -70,6 +71,9 @@ func tokenize(expr string) ([]token, error) {
 			i++
 		case c == ',':
 			tokens = append(tokens, token{typ: tokComma, value: ","})
+			i++
+		case c == '=':
+			tokens = append(tokens, token{typ: tokEquals, value: "="})
 			i++
 		case isDigit(c) || c == '.':
 			start := i
@@ -269,11 +273,31 @@ func fnAvg(a []float64) (float64, error) {
 type parser struct {
 	tokens []token
 	pos    int
+	env    map[string]float64 // variable environment (may be nil)
 }
 
 func (p *parser) peek() token { return p.tokens[p.pos] }
 
+func (p *parser) peekAt(offset int) token {
+	idx := p.pos + offset
+	if idx >= len(p.tokens) {
+		return p.tokens[len(p.tokens)-1] // EOF
+	}
+	return p.tokens[idx]
+}
+
 func (p *parser) atEnd() bool { return p.peek().typ == tokEOF }
+
+// assignmentTarget reports whether the token stream begins with "IDENT =",
+// indicating an assignment. It returns the (lowercased) variable name when so,
+// without consuming any tokens. The name must not collide with a built-in
+// constant or function — those are rejected here so the error is clear.
+func (p *parser) assignmentTarget() (string, bool) {
+	if p.peek().typ != tokIdent || p.peekAt(1).typ != tokEquals {
+		return "", false
+	}
+	return strings.ToLower(p.peek().value), true
+}
 
 func (p *parser) advance() token {
 	t := p.tokens[p.pos]
@@ -437,11 +461,35 @@ func (p *parser) parseIdent(t token) (float64, error) {
 		return 0, fmt.Errorf("unknown function: %q", t.value)
 	}
 
-	// Otherwise it must be a constant.
+	// Otherwise it is a constant or a variable reference.
 	if val, ok := constants[name]; ok {
 		return val, nil
 	}
-	return 0, fmt.Errorf("unknown identifier: %q", t.value)
+	if p.env != nil {
+		if val, ok := p.env[name]; ok {
+			return val, nil
+		}
+	}
+	// "ans" is always available, defaulting to 0 before any prior result.
+	if name == "ans" {
+		return 0, nil
+	}
+	return 0, fmt.Errorf("undefined variable: %q", t.value)
+}
+
+// isReserved reports whether name (already lowercased) is a built-in constant
+// or function and therefore may not be used as a variable name.
+func isReserved(name string) bool {
+	if _, ok := constants[name]; ok {
+		return true
+	}
+	if _, ok := functions[name]; ok {
+		return true
+	}
+	if _, ok := variadicFunctions[name]; ok {
+		return true
+	}
+	return false
 }
 
 // parseArgList parses "( expr { , expr } )" and returns the evaluated

@@ -20,15 +20,19 @@ import (
 //
 // If "expression" is non-empty it takes precedence.
 type CalcRequest struct {
-	Expression string  `json:"expression"`
-	Operation  string  `json:"operation"`
-	A          float64 `json:"a"`
-	B          float64 `json:"b"`
+	Expression string             `json:"expression"`
+	Operation  string             `json:"operation"`
+	A          float64            `json:"a"`
+	B          float64            `json:"b"`
+	Variables  map[string]float64 `json:"variables,omitempty"`
 }
 
-// CalcResponse is the JSON response returned on success.
+// CalcResponse is the JSON response returned on success. Variables echoes the
+// (possibly updated) variable environment so a stateless client can persist it
+// and send it back on the next request.
 type CalcResponse struct {
-	Result float64 `json:"result"`
+	Result    float64            `json:"result"`
+	Variables map[string]float64 `json:"variables,omitempty"`
 }
 
 // ErrorResponse is the JSON response returned on failure.
@@ -70,22 +74,35 @@ func calculate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var result float64
+	var vars map[string]float64
 	var err error
-	if strings.TrimSpace(req.Expression) != "" {
-		result, err = calculator.Evaluate(req.Expression)
-	} else {
+	switch {
+	case strings.TrimSpace(req.Expression) != "":
+		// Expression form supports variables and assignment; the updated
+		// environment is echoed back to the client.
+		result, vars, err = calculator.EvaluateWith(req.Expression, req.Variables)
+	case req.Operation != "":
+		// Structured two-operand form.
 		result, err = calculator.Compute(req.Operation, req.A, req.B)
+	default:
+		// Neither form supplied — treat as an empty expression rather than
+		// falling through to an opaque "unknown operation".
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "empty expression"})
+		return
 	}
 	if err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, calculator.ErrUnknownOperation) {
+		switch {
+		case errors.Is(err, calculator.ErrUnknownOperation):
+			status = http.StatusUnprocessableEntity
+		case errors.Is(err, calculator.ErrNotFinite):
 			status = http.StatusUnprocessableEntity
 		}
 		writeJSON(w, status, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, CalcResponse{Result: result})
+	writeJSON(w, http.StatusOK, CalcResponse{Result: result, Variables: vars})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

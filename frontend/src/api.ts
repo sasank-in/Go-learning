@@ -4,25 +4,38 @@
 // so we use a relative base URL. Override with VITE_API_BASE if needed.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
+export type Variables = Record<string, number>;
+
 export interface CalcSuccess {
   result: number;
+  variables?: Variables;
 }
 
 export interface CalcError {
   error: string;
 }
 
+export interface CalcResult {
+  result: number;
+  variables: Variables;
+}
+
 /**
- * Evaluate an arithmetic expression on the backend.
+ * Evaluate an arithmetic expression on the backend, carrying a variable
+ * environment so assignments (x = 5) and references (x * 2, ans) work across
+ * calls. Returns the result plus the updated variable map.
  * Throws an Error (with the backend's message) on failure.
  */
-export async function calculate(expression: string): Promise<number> {
+export async function calculate(
+  expression: string,
+  variables: Variables = {},
+): Promise<CalcResult> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/calculate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expression }),
+      body: JSON.stringify({ expression, variables }),
     });
   } catch {
     throw new Error("Cannot reach the calculator service");
@@ -39,5 +52,5 @@ export async function calculate(expression: string): Promise<number> {
     throw new Error(message);
   }
 
-  return data.result;
+  return { result: data.result, variables: data.variables ?? {} };
 }
