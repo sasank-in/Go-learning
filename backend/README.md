@@ -43,18 +43,24 @@ Supports `+ - * / % ^`, unary minus/plus, parentheses, decimals, and
 scientific notation (`1.5e3`), with standard operator precedence. `^`
 (exponent) is right-associative.
 
+The postfix `!` operator computes factorial (e.g. `5!` → 120).
+
 Functions (case-insensitive):
 
 - **Single-argument**: `sqrt`, `cbrt`, `abs`, `floor`, `ceil`, `round`,
-  `trunc`, `sign`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`,
-  `cosh`, `tanh`, `exp`, `ln`, `log10`, `log2`, `deg` (radians→degrees),
-  `rad` (degrees→radians)
+  `trunc`, `sign`, `fact`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
+  `sinh`, `cosh`, `tanh`, `exp`, `ln`, `log10`, `log2`, `deg`
+  (radians→degrees), `rad` (degrees→radians)
 - **Multi-argument**: `pow(x, y)`, `atan2(y, x)`, `hypot(x, y)`,
-  `log(x[, base])`, `max(...)`, `min(...)`, `sum(...)`, `avg(...)`
+  `log(x[, base])`, `max(...)`, `min(...)`, `sum(...)`, `avg(...)`,
+  `gcd(...)`, `lcm(...)`, `ncr(n, r)`, `npr(n, r)`
 
 Constants: `pi`, `e`, `tau`.
 
-Examples: `sqrt(16) + 2 * pi`, `pow(2, 10)`, `max(1, 9, 4)`, `log(8, 2)`.
+**Angle mode**: include `"angleMode": "deg"` in the request to make `sin`,
+`cos`, `tan` (and inverse trig) work in degrees. Defaults to radians.
+
+Examples: `5!`, `ncr(5, 2)`, `gcd(48, 36)`, `sin(90)` with `angleMode: "deg"`.
 
 **Structured form** — a single two-operand operation:
 ```json

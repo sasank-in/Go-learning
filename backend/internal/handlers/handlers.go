@@ -25,6 +25,8 @@ type CalcRequest struct {
 	A          float64            `json:"a"`
 	B          float64            `json:"b"`
 	Variables  map[string]float64 `json:"variables,omitempty"`
+	// AngleMode is "deg" or "rad" (default). Controls trig functions.
+	AngleMode string `json:"angleMode,omitempty"`
 }
 
 // CalcResponse is the JSON response returned on success. Variables echoes the
@@ -76,11 +78,18 @@ func calculate(w http.ResponseWriter, r *http.Request) {
 	var result float64
 	var vars map[string]float64
 	var err error
+	angle := calculator.Radians
+	if strings.EqualFold(req.AngleMode, "deg") {
+		angle = calculator.Degrees
+	}
 	switch {
 	case strings.TrimSpace(req.Expression) != "":
 		// Expression form supports variables and assignment; the updated
 		// environment is echoed back to the client.
-		result, vars, err = calculator.EvaluateWith(req.Expression, req.Variables)
+		result, vars, err = calculator.EvaluateWithOptions(req.Expression, calculator.Options{
+			Vars:  req.Variables,
+			Angle: angle,
+		})
 	case req.Operation != "":
 		// Structured two-operand form.
 		result, err = calculator.Compute(req.Operation, req.A, req.B)

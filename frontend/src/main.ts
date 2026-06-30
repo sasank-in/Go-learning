@@ -1,9 +1,10 @@
 import "./style.css";
-import { calculate, type Variables } from "./api";
+import { calculate, type Variables, type AngleMode } from "./api";
 
 // ---------------------------------------------------------------------------
-// Keypad definition. Each key has a label, the text it inserts, and a style
-// class controlling its color/role in the corporate palette.
+// Keypad definition. A wide 6-column grid keeps the calculator compact (short)
+// rather than a tall single column. Each key has a label, the text it inserts,
+// and a role controlling its visual tier.
 // ---------------------------------------------------------------------------
 type KeyRole = "fn" | "op" | "num" | "util" | "equals";
 
@@ -12,61 +13,83 @@ interface Key {
   insert?: string; // text appended to the expression (defaults to label)
   role: KeyRole;
   action?: "clear" | "back" | "equals";
-  span?: number; // number of grid columns this key occupies (default 1)
+  span?: number; // grid columns this key occupies (default 1)
   title?: string; // tooltip
 }
 
+// 6 columns × 6 rows. Left 3 columns lean scientific, right 3 numeric/ops.
 const KEYS: Key[] = [
+  // Row 1
   { label: "sin", insert: "sin(", role: "fn" },
   { label: "cos", insert: "cos(", role: "fn" },
   { label: "tan", insert: "tan(", role: "fn" },
-  { label: "√", insert: "sqrt(", role: "fn" },
-  { label: "^", role: "fn" },
-
-  { label: "ln", insert: "ln(", role: "fn" },
-  { label: "log", insert: "log(", role: "fn" },
-  { label: "π", insert: "pi", role: "fn" },
-  { label: "e", role: "fn" },
-  { label: "%", role: "fn" },
-
-  { label: "xⁿ", insert: "pow(", role: "fn" },
-  { label: "max", insert: "max(", role: "fn" },
-  { label: "min", insert: "min(", role: "fn" },
-  { label: "abs", insert: "abs(", role: "fn" },
-  { label: ",", role: "fn" },
-
-  { label: "C", role: "util", action: "clear" },
+  { label: "C", role: "util", action: "clear", title: "Clear" },
   { label: "(", role: "util" },
   { label: ")", role: "util" },
-  { label: "Ans", insert: "ans", role: "util" },
-  { label: "⌫", role: "util", action: "back" },
 
+  // Row 2
+  { label: "ln", insert: "ln(", role: "fn" },
+  { label: "log", insert: "log(", role: "fn", title: "log base 10" },
+  { label: "√", insert: "sqrt(", role: "fn", title: "square root" },
   { label: "7", role: "num" },
   { label: "8", role: "num" },
   { label: "9", role: "num" },
-  { label: "÷", insert: "/", role: "op" },
-  { label: "×", insert: "*", role: "op" },
 
+  // Row 3
+  { label: "x²", insert: "^2", role: "fn", title: "square" },
+  { label: "xⁿ", insert: "^", role: "fn", title: "power" },
+  { label: "x!", insert: "!", role: "fn", title: "factorial" },
   { label: "4", role: "num" },
   { label: "5", role: "num" },
   { label: "6", role: "num" },
-  { label: "−", insert: "-", role: "op" },
-  { label: "+", role: "op" },
 
+  // Row 4
+  { label: "π", insert: "pi", role: "fn" },
+  { label: "e", role: "fn" },
+  { label: "1/x", insert: "1/", role: "fn", title: "reciprocal" },
   { label: "1", role: "num" },
   { label: "2", role: "num" },
   { label: "3", role: "num" },
-  { label: ".", role: "num" },
-  { label: "=", role: "equals", action: "equals" },
 
-  // Bottom row: a wide "0" plus assignment helper.
-  { label: "0", role: "num", span: 4 },
-  { label: "x =", insert: "x = ", role: "util", title: "Assign to variable x" },
+  // Row 5
+  { label: "nCr", insert: "ncr(", role: "fn", title: "combinations" },
+  { label: "nPr", insert: "npr(", role: "fn", title: "permutations" },
+  { label: "abs", insert: "abs(", role: "fn" },
+  { label: "0", role: "num" },
+  { label: ".", role: "num" },
+  { label: ",", role: "util", title: "argument separator" },
+
+  // Row 6 — operators + actions
+  { label: "Ans", insert: "ans", role: "util" },
+  { label: "%", role: "op" },
+  { label: "÷", insert: "/", role: "op" },
+  { label: "×", insert: "*", role: "op" },
+  { label: "−", insert: "-", role: "op" },
+  { label: "+", role: "op" },
+
+  // Row 7 — bottom action bar
+  { label: "⌫", role: "util", action: "back", title: "Backspace", span: 2 },
+  { label: "x = ", insert: "x = ", role: "util", title: "Assign to variable x", span: 2 },
+  { label: "=", role: "equals", action: "equals", span: 2 },
 ];
 
 interface HistoryEntry {
   expr: string;
   result: string;
+}
+
+// ---------------------------------------------------------------------------
+// Persisted preferences.
+// ---------------------------------------------------------------------------
+type Theme = "dark" | "light";
+const LS_THEME = "calc.theme";
+const LS_ANGLE = "calc.angle";
+
+function loadTheme(): Theme {
+  return localStorage.getItem(LS_THEME) === "light" ? "light" : "dark";
+}
+function loadAngle(): AngleMode {
+  return localStorage.getItem(LS_ANGLE) === "deg" ? "deg" : "rad";
 }
 
 // ---------------------------------------------------------------------------
@@ -78,9 +101,13 @@ let errorText = "";
 let history: HistoryEntry[] = [];
 let busy = false;
 let variables: Variables = {};
+let theme: Theme = loadTheme();
+let angle: AngleMode = loadAngle();
 // True immediately after "=", so the next digit/function starts a fresh
 // expression instead of appending to the previous one.
 let justEvaluated = false;
+
+applyTheme();
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = renderShell();
@@ -91,6 +118,8 @@ const errorEl = app.querySelector<HTMLDivElement>("#error")!;
 const historyEl = app.querySelector<HTMLUListElement>("#history-list")!;
 const varsEl = app.querySelector<HTMLUListElement>("#vars-list")!;
 const keypadEl = app.querySelector<HTMLDivElement>("#keypad")!;
+const angleBtn = app.querySelector<HTMLButtonElement>("#angle-toggle")!;
+const themeBtn = app.querySelector<HTMLButtonElement>("#theme-toggle")!;
 
 keypadEl.innerHTML = KEYS.map((k, i) => {
   const style = k.span ? ` style="grid-column: span ${k.span};"` : "";
@@ -107,6 +136,19 @@ keypadEl.addEventListener("click", (e) => {
   handleKey(KEYS[Number(btn.dataset.i)]);
 });
 
+angleBtn.addEventListener("click", () => {
+  angle = angle === "rad" ? "deg" : "rad";
+  localStorage.setItem(LS_ANGLE, angle);
+  renderControls();
+});
+
+themeBtn.addEventListener("click", () => {
+  theme = theme === "dark" ? "light" : "dark";
+  localStorage.setItem(LS_THEME, theme);
+  applyTheme();
+  renderControls();
+});
+
 app
   .querySelector<HTMLButtonElement>("#clear-history")!
   .addEventListener("click", () => {
@@ -117,10 +159,7 @@ app
 historyEl.addEventListener("click", (e) => {
   const li = (e.target as HTMLElement).closest<HTMLLIElement>("li[data-expr]");
   if (!li) return;
-  if (justEvaluated) {
-    expression = "";
-    justEvaluated = false;
-  }
+  justEvaluated = false;
   expression = li.dataset.expr!;
   errorText = "";
   render();
@@ -144,6 +183,7 @@ varsEl.addEventListener("click", (e) => {
 
 window.addEventListener("keydown", onKeyboard);
 
+renderControls();
 render();
 renderHistory();
 renderVariables();
@@ -176,13 +216,13 @@ function handleKey(key: Key) {
   render();
 }
 
-// applyFreshStart handles input right after pressing "=". An operator continues
-// from the previous result (1024 then "+" -> "ans+"); anything else begins a
+// applyFreshStart handles input right after pressing "=". An operator or a
+// postfix (!, ^) continues from the previous result; anything else begins a
 // brand-new expression.
 function applyFreshStart(next: string) {
   if (!justEvaluated) return;
   justEvaluated = false;
-  if (/^[+\-*/%^]/.test(next)) {
+  if (/^[+\-*/%^!]/.test(next)) {
     expression = "ans";
   } else {
     expression = "";
@@ -196,13 +236,13 @@ async function evaluate() {
   busy = true;
   render();
   try {
-    const { result, variables: updated } = await calculate(expr, variables);
+    const { result, variables: updated } = await calculate(expr, variables, angle);
     variables = updated;
     resultText = formatNumber(result);
     errorText = "";
     expression = resultText;
     justEvaluated = true;
-    history = [{ expr, result: resultText }, ...history].slice(0, 12);
+    history = [{ expr, result: resultText }, ...history].slice(0, 20);
     renderHistory();
     renderVariables();
   } catch (err) {
@@ -237,7 +277,7 @@ function onKeyboard(e: KeyboardEvent) {
     render();
     return;
   }
-  if (/^[0-9+\-*/%^(),.=]$/.test(key)) {
+  if (/^[0-9+\-*/%^(),.!=]$/.test(key)) {
     applyFreshStart(key);
     expression += key;
     errorText = "";
@@ -248,8 +288,19 @@ function onKeyboard(e: KeyboardEvent) {
 // ---------------------------------------------------------------------------
 // Rendering.
 // ---------------------------------------------------------------------------
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+}
+
+function renderControls() {
+  angleBtn.textContent = angle === "deg" ? "DEG" : "RAD";
+  angleBtn.title = `Angle mode: ${angle.toUpperCase()} (click to switch)`;
+  themeBtn.textContent = theme === "dark" ? "☾" : "☀";
+  themeBtn.title = `Theme: ${theme} (click to switch)`;
+}
+
 function render() {
-  exprEl.textContent = expression || " ";
+  exprEl.textContent = expression || " ";
   resultEl.textContent = busy ? "…" : resultText;
   errorEl.textContent = errorText;
   errorEl.classList.toggle("is-visible", Boolean(errorText));
@@ -258,7 +309,7 @@ function render() {
 
 function renderHistory() {
   if (history.length === 0) {
-    historyEl.innerHTML = `<li class="history__empty">No calculations yet</li>`;
+    historyEl.innerHTML = `<li class="card__empty">No calculations yet</li>`;
     return;
   }
   historyEl.innerHTML = history
@@ -278,7 +329,6 @@ function renderVariables() {
     varsEl.innerHTML = `<li class="card__empty">Assign one with <code>x = 5</code></li>`;
     return;
   }
-  // "ans" first, then alphabetical.
   entries.sort(([a], [b]) =>
     a === "ans" ? -1 : b === "ans" ? 1 : a.localeCompare(b),
   );
@@ -302,7 +352,10 @@ function renderShell(): string {
           <h1>Calc</h1>
           <p>Scientific Calculator</p>
         </div>
-        <span class="brand__badge">Powered by Go</span>
+        <div class="brand__controls">
+          <button id="angle-toggle" type="button" class="chip-btn" aria-label="Toggle angle mode">RAD</button>
+          <button id="theme-toggle" type="button" class="icon-btn" aria-label="Toggle theme">☾</button>
+        </div>
       </header>
 
       <section class="panel">
@@ -340,7 +393,6 @@ function renderShell(): string {
 // ---------------------------------------------------------------------------
 function formatNumber(n: number): string {
   if (!Number.isFinite(n)) return String(n);
-  // Trim floating-point noise while keeping reasonable precision.
   return String(Number(n.toPrecision(12)));
 }
 

@@ -20,22 +20,26 @@ export interface CalcResult {
   variables: Variables;
 }
 
+export type AngleMode = "rad" | "deg";
+
 /**
  * Evaluate an arithmetic expression on the backend, carrying a variable
  * environment so assignments (x = 5) and references (x * 2, ans) work across
- * calls. Returns the result plus the updated variable map.
+ * calls. angleMode controls how trig functions interpret angles.
+ * Returns the result plus the updated variable map.
  * Throws an Error (with the backend's message) on failure.
  */
 export async function calculate(
   expression: string,
   variables: Variables = {},
+  angleMode: AngleMode = "rad",
 ): Promise<CalcResult> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/calculate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expression, variables }),
+      body: JSON.stringify({ expression, variables, angleMode }),
     });
   } catch {
     throw new Error("Cannot reach the calculator service");

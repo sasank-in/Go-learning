@@ -23,6 +23,7 @@ const (
 	tokRParen
 	tokComma
 	tokEquals
+	tokBang
 	tokIdent
 	tokEOF
 )
@@ -74,6 +75,9 @@ func tokenize(expr string) ([]token, error) {
 			i++
 		case c == '=':
 			tokens = append(tokens, token{typ: tokEquals, value: "="})
+			i++
+		case c == '!':
+			tokens = append(tokens, token{typ: tokBang, value: "!"})
 			i++
 		case isDigit(c) || c == '.':
 			start := i
@@ -146,6 +150,7 @@ var functions = map[string]func(float64) float64{
 	"round": math.Round,
 	"trunc": math.Trunc,
 	"sign":  signum,
+	"fact":  factorial,
 	"sin":   math.Sin,
 	"cos":   math.Cos,
 	"tan":   math.Tan,
@@ -175,6 +180,111 @@ var variadicFunctions = map[string]func([]float64) (float64, error){
 	"sum":   fnSum,
 	"avg":   fnAvg,
 	"log":   fnLog, // log(x) -> base 10; log(x, base) -> arbitrary base
+	"gcd":   fnGCD,
+	"lcm":   fnLCM,
+	"ncr":   fnNCR, // combinations: ncr(n, r)
+	"npr":   fnNPR, // permutations: npr(n, r)
+}
+
+// factorial returns n! for non-negative integers, or NaN for invalid input
+// (negative or non-integer), which the finite-check then reports as an error.
+func factorial(n float64) float64 {
+	if n < 0 || n != math.Trunc(n) || n > 170 { // 171! overflows float64
+		return math.NaN()
+	}
+	result := 1.0
+	for i := 2.0; i <= n; i++ {
+		result *= i
+	}
+	return result
+}
+
+func fnGCD(a []float64) (float64, error) {
+	if len(a) < 2 {
+		return 0, errors.New("gcd expects at least 2 arguments")
+	}
+	g := math.Abs(a[0])
+	for _, v := range a[1:] {
+		g = gcd(g, math.Abs(v))
+	}
+	return g, nil
+}
+
+func fnLCM(a []float64) (float64, error) {
+	if len(a) < 2 {
+		return 0, errors.New("lcm expects at least 2 arguments")
+	}
+	l := math.Abs(a[0])
+	for _, v := range a[1:] {
+		v = math.Abs(v)
+		g := gcd(l, v)
+		if g == 0 {
+			l = 0
+		} else {
+			l = l / g * v
+		}
+	}
+	return l, nil
+}
+
+// gcd computes the greatest common divisor of two non-negative whole numbers.
+func gcd(a, b float64) float64 {
+	a, b = math.Trunc(a), math.Trunc(b)
+	for b != 0 {
+		a, b = b, math.Mod(a, b)
+	}
+	return a
+}
+
+func fnNCR(a []float64) (float64, error) {
+	if len(a) != 2 {
+		return 0, fmt.Errorf("ncr expects 2 arguments, got %d", len(a))
+	}
+	return choose(a[0], a[1])
+}
+
+func fnNPR(a []float64) (float64, error) {
+	if len(a) != 2 {
+		return 0, fmt.Errorf("npr expects 2 arguments, got %d", len(a))
+	}
+	n, r := a[0], a[1]
+	c, err := choose(n, r)
+	if err != nil {
+		return 0, err
+	}
+	return c * factorial(r), nil
+}
+
+// choose computes n-choose-r (combinations) with validation.
+func choose(n, r float64) (float64, error) {
+	if n < 0 || r < 0 || n != math.Trunc(n) || r != math.Trunc(r) {
+		return 0, errors.New("ncr/npr require non-negative integers")
+	}
+	if r > n {
+		return 0, nil
+	}
+	return factorial(n) / (factorial(r) * factorial(n-r)), nil
+}
+
+// angleInputFuncs are functions whose argument is an angle (subject to the
+// current angle mode). angleOutputFuncs return an angle.
+var angleInputFuncs = map[string]bool{"sin": true, "cos": true, "tan": true}
+var angleOutputFuncs = map[string]bool{"asin": true, "acos": true, "atan": true}
+
+// toRadians converts v from the current angle mode into radians.
+func (p *parser) toRadians(v float64) float64 {
+	if p.angle == Degrees {
+		return v * math.Pi / 180
+	}
+	return v
+}
+
+// fromRadians converts v from radians into the current angle mode.
+func (p *parser) fromRadians(v float64) float64 {
+	if p.angle == Degrees {
+		return v * 180 / math.Pi
+	}
+	return v
 }
 
 func signum(x float64) float64 {
@@ -274,6 +384,7 @@ type parser struct {
 	tokens []token
 	pos    int
 	env    map[string]float64 // variable environment (may be nil)
+	angle  AngleMode          // radians (default) or degrees for trig
 }
 
 func (p *parser) peek() token { return p.tokens[p.pos] }
@@ -404,8 +515,23 @@ func (p *parser) parseUnary() (float64, error) {
 		p.advance()
 		return p.parseUnary()
 	default:
-		return p.parsePrimary()
+		return p.parsePostfix()
 	}
+}
+
+// parsePostfix parses a primary followed by zero or more postfix operators.
+// Currently the only postfix operator is "!" (factorial), which binds tighter
+// than "^" so that 3!^2 == (3!)^2.
+func (p *parser) parsePostfix() (float64, error) {
+	v, err := p.parsePrimary()
+	if err != nil {
+		return 0, err
+	}
+	for p.peek().typ == tokBang {
+		p.advance()
+		v = factorial(v) // NaN for invalid input; finite-check reports it
+	}
+	return v, nil
 }
 
 func (p *parser) parsePrimary() (float64, error) {
@@ -450,13 +576,31 @@ func (p *parser) parseIdent(t token) (float64, error) {
 		// Variadic / multi-argument functions take precedence so names like
 		// "log" can accept a flexible arity.
 		if fn, ok := variadicFunctions[name]; ok {
-			return fn(args)
+			result, err := fn(args)
+			if err != nil {
+				return 0, err
+			}
+			// atan2 returns an angle — convert from radians if in degree mode.
+			if name == "atan2" {
+				result = p.fromRadians(result)
+			}
+			return result, nil
 		}
 		if fn, ok := functions[name]; ok {
 			if len(args) != 1 {
 				return 0, fmt.Errorf("%s expects 1 argument, got %d", name, len(args))
 			}
-			return fn(args[0]), nil
+			arg := args[0]
+			// Trig functions take an angle: convert the input to radians.
+			if angleInputFuncs[name] {
+				arg = p.toRadians(arg)
+			}
+			result := fn(arg)
+			// Inverse trig functions return an angle: convert the output.
+			if angleOutputFuncs[name] {
+				result = p.fromRadians(result)
+			}
+			return result, nil
 		}
 		return 0, fmt.Errorf("unknown function: %q", t.value)
 	}

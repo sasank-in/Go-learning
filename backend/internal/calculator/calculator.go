@@ -70,8 +70,28 @@ func Evaluate(expr string) (float64, error) {
 	return result, err
 }
 
+// AngleMode controls how trigonometric functions interpret their input
+// (and how inverse trig functions produce output).
+type AngleMode int
+
+const (
+	// Radians is the default angle mode.
+	Radians AngleMode = iota
+	// Degrees interprets/produces trig angles in degrees.
+	Degrees
+)
+
+// Options configures an evaluation.
+type Options struct {
+	// Vars is the incoming variable environment (never mutated).
+	Vars map[string]float64
+	// Angle selects radians (default) or degrees for trig functions.
+	Angle AngleMode
+}
+
 // EvaluateWith parses and evaluates an expression in the context of a variable
 // environment, returning the result and the (possibly updated) environment.
+// Trig functions use radians. See EvaluateWithOptions for angle-mode control.
 //
 // In addition to everything Evaluate supports, it allows:
 //   - Variable references: a bare identifier resolves to a previously defined
@@ -82,8 +102,13 @@ func Evaluate(expr string) (float64, error) {
 // The supplied vars map is never mutated; a new map is returned so callers can
 // keep their own copy intact. Passing a nil map is fine (treated as empty).
 func EvaluateWith(expr string, vars map[string]float64) (float64, map[string]float64, error) {
-	env := make(map[string]float64, len(vars)+1)
-	for k, v := range vars {
+	return EvaluateWithOptions(expr, Options{Vars: vars})
+}
+
+// EvaluateWithOptions is EvaluateWith with explicit options (e.g. angle mode).
+func EvaluateWithOptions(expr string, opts Options) (float64, map[string]float64, error) {
+	env := make(map[string]float64, len(opts.Vars)+1)
+	for k, v := range opts.Vars {
 		env[k] = v
 	}
 
@@ -96,7 +121,7 @@ func EvaluateWith(expr string, vars map[string]float64) (float64, map[string]flo
 		return 0, env, err
 	}
 
-	p := &parser{tokens: tokens, env: env}
+	p := &parser{tokens: tokens, env: env, angle: opts.Angle}
 
 	// Detect a leading assignment: IDENT "=" ...
 	if name, ok := p.assignmentTarget(); ok {
